@@ -1,0 +1,11 @@
+{
+  "tileLayer": {
+    "url": "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+    "attribution": "Map data © Google",
+    "maxZoom": 20
+  },
+  "overlayLayer": {
+    "url": "",
+    "attribution": ""
+  }
+}

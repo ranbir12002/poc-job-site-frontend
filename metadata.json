@@ -1,0 +1,8 @@
+{
+  "name": "Glass Site Mapper",
+  "description": "An Apple Glass-inspired dashboard for creating projects, drawing sites on OpenStreetMap, and calculating site metrics like perimeter length.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
