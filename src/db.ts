@@ -1,51 +1,68 @@
-import { Pool } from 'pg';
-import dotenv from 'dotenv';
+import Database from 'better-sqlite3';
+import path from 'path';
 
-dotenv.config();
+const dbPath = path.join(process.cwd(), 'database.sqlite');
+const db = new Database(dbPath);
 
-// Default to a dummy connection string if not provided, just to allow the app to start
-// In a real scenario, this would fail or use a local dev DB
-const connectionString = process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/glass_mapper';
+// Mock pool to minimize changes in server.ts
+export const pool = {
+  query: (text: string, params: any[] = []) => {
+    // Convert $1, $2, etc. to ? for better-sqlite3 compatibility
+    const sqliteSql = text.replace(/\$(\d+)/g, '?');
 
-export const pool = new Pool({
-  connectionString,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-});
+    try {
+      if (text.trim().toLowerCase().startsWith('select')) {
+        const rows = db.prepare(sqliteSql).all(...params);
+        return { rows };
+      } else {
+        const info = db.prepare(sqliteSql).run(...params);
+        // For INSERT RETURNING *, we need to fetch the record separately in SQLite if RETURNING is not supported or different
+        // better-sqlite3 doesn't support RETURNING * in some versions or needs specific handling.
+        // Actually, better-sqlite3 supports RETURNING in newer versions. Let's try it.
+        // If it fails, we might need to handle it.
+        if (text.includes('RETURNING')) {
+          const rows = db.prepare(sqliteSql).all(...params);
+          return { rows };
+        }
+        return { rows: [], lastInsertRowid: info.lastInsertRowid };
+      }
+    } catch (error) {
+      console.error('Database query error:', error);
+      throw error;
+    }
+  },
+  connect: async () => ({
+    query: (text: string, params: any[] = []) => pool.query(text, params),
+    release: () => { },
+  }),
+};
 
-// Helper to initialize the database schema
 export async function initDb() {
-  const client = await pool.connect();
   try {
-    await client.query(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS projects (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
         created_at BIGINT NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS sites (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+        id TEXT PRIMARY KEY,
+        project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
         created_at BIGINT NOT NULL,
-        points JSONB NOT NULL DEFAULT '[]',
-        metrics JSONB NOT NULL DEFAULT '{}',
-        is_closed BOOLEAN DEFAULT TRUE,
+        points TEXT NOT NULL DEFAULT '[]',
+        metrics TEXT NOT NULL DEFAULT '{}',
+        is_closed INTEGER DEFAULT 1,
         custom_tile_url TEXT,
-        contractor_commitment_per_day NUMERIC,
-        daily_progress JSONB NOT NULL DEFAULT '[]'
+        contractor_commitment_per_day REAL,
+        daily_progress TEXT NOT NULL DEFAULT '[]'
       );
-
-      -- Add columns if they don't exist (for existing DBs)
-      ALTER TABLE sites ADD COLUMN IF NOT EXISTS custom_tile_url TEXT;
-      ALTER TABLE sites ADD COLUMN IF NOT EXISTS contractor_commitment_per_day NUMERIC;
-      ALTER TABLE sites ADD COLUMN IF NOT EXISTS daily_progress JSONB NOT NULL DEFAULT '[]';
     `);
-    console.log('Database initialized successfully');
+    console.log('SQLite database initialized successfully');
   } catch (err) {
-    console.error('Error initializing database:', err);
-  } finally {
-    client.release();
+    console.error('Error initializing SQLite database:', err);
   }
 }
+

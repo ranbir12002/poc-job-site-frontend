@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { pool, initDb } from './src/db';
 import { Project, Site } from './src/types';
+import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import ffmpeg from 'fluent-ffmpeg';
 import fs from 'fs';
@@ -93,7 +94,7 @@ async function startServer() {
         console.log('Frames extracted! Generating tour nodes...');
         const nodes = generateNodes(tourId, outputFolder);
         // Clean up the uploaded video to save space
-        try { fs.unlinkSync(videoPath); } catch (_) {}
+        try { fs.unlinkSync(videoPath); } catch (_) { }
         res.json({ success: true, tourId, nodes });
       })
       .on('error', (err: any) => {
@@ -112,16 +113,23 @@ async function startServer() {
         return {
           ...project,
           createdAt: parseInt(project.created_at),
-          sites: sitesResult.rows.map(site => ({
-            ...site,
-            createdAt: parseInt(site.created_at),
-            points: site.points,
-            metrics: site.metrics,
-            isClosed: site.is_closed,
-            customTileUrl: site.custom_tile_url,
-            contractorCommitmentPerDay: site.contractor_commitment_per_day ? parseFloat(site.contractor_commitment_per_day) : undefined,
-            dailyProgress: site.daily_progress || []
-          }))
+          sites: sitesResult.rows.map(site => {
+            // SQLite returns strings for JSON columns
+            const points = typeof site.points === 'string' ? JSON.parse(site.points) : site.points;
+            const metrics = typeof site.metrics === 'string' ? JSON.parse(site.metrics) : site.metrics;
+            const dailyProgress = typeof site.daily_progress === 'string' ? JSON.parse(site.daily_progress) : site.daily_progress;
+
+            return {
+              ...site,
+              createdAt: parseInt(site.created_at),
+              points,
+              metrics,
+              isClosed: !!site.is_closed,
+              customTileUrl: site.custom_tile_url,
+              contractorCommitmentPerDay: site.contractor_commitment_per_day ? parseFloat(site.contractor_commitment_per_day) : undefined,
+              dailyProgress: dailyProgress || []
+            };
+          })
         };
       }));
       res.json(projects);
@@ -133,13 +141,13 @@ async function startServer() {
 
   app.post('/api/projects', async (req, res) => {
     const { name, description, createdAt } = req.body;
+    const id = uuidv4();
     try {
-      const result = await pool.query(
-        'INSERT INTO projects (name, description, created_at) VALUES ($1, $2, $3) RETURNING *',
-        [name, description, createdAt]
+      await pool.query(
+        'INSERT INTO projects (id, name, description, created_at) VALUES ($1, $2, $3, $4)',
+        [id, name, description, createdAt]
       );
-      const project = result.rows[0];
-      res.json({ ...project, createdAt: parseInt(project.created_at), sites: [] });
+      res.json({ id, name, description, createdAt, sites: [] });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Failed to create project' });
@@ -147,23 +155,25 @@ async function startServer() {
   });
 
   app.post('/api/projects/:id/sites', async (req, res) => {
-    const { id } = req.params;
+    const { id: projectId } = req.params;
     const { name, createdAt, points, metrics, isClosed, customTileUrl, contractorCommitmentPerDay, dailyProgress } = req.body;
+    const siteId = uuidv4();
     try {
-      const result = await pool.query(
-        'INSERT INTO sites (project_id, name, created_at, points, metrics, is_closed, custom_tile_url, contractor_commitment_per_day, daily_progress) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
-        [id, name, createdAt, JSON.stringify(points), JSON.stringify(metrics), isClosed, customTileUrl, contractorCommitmentPerDay, JSON.stringify(dailyProgress || [])]
+      await pool.query(
+        'INSERT INTO sites (id, project_id, name, created_at, points, metrics, is_closed, custom_tile_url, contractor_commitment_per_day, daily_progress) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+        [siteId, projectId, name, createdAt, JSON.stringify(points), JSON.stringify(metrics), isClosed ? 1 : 0, customTileUrl, contractorCommitmentPerDay, JSON.stringify(dailyProgress || [])]
       );
-      const site = result.rows[0];
       res.json({
-        ...site,
-        createdAt: parseInt(site.created_at),
-        points: site.points,
-        metrics: site.metrics,
-        isClosed: site.is_closed,
-        customTileUrl: site.custom_tile_url,
-        contractorCommitmentPerDay: site.contractor_commitment_per_day ? parseFloat(site.contractor_commitment_per_day) : undefined,
-        dailyProgress: site.daily_progress || []
+        id: siteId,
+        projectId,
+        name,
+        createdAt,
+        points,
+        metrics,
+        isClosed,
+        customTileUrl,
+        contractorCommitmentPerDay,
+        dailyProgress: dailyProgress || []
       });
     } catch (err) {
       console.error(err);
@@ -177,7 +187,7 @@ async function startServer() {
     try {
       const result = await pool.query(
         'UPDATE sites SET points = $1, metrics = $2, is_closed = $3, custom_tile_url = $4, contractor_commitment_per_day = $5, daily_progress = $6 WHERE id = $7 RETURNING *',
-        [JSON.stringify(points), JSON.stringify(metrics), isClosed, customTileUrl, contractorCommitmentPerDay, JSON.stringify(dailyProgress || []), id]
+        [JSON.stringify(points), JSON.stringify(metrics), isClosed ? 1 : 0, customTileUrl, contractorCommitmentPerDay, JSON.stringify(dailyProgress || []), id]
       );
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Site not found' });
@@ -186,12 +196,12 @@ async function startServer() {
       res.json({
         ...site,
         createdAt: parseInt(site.created_at),
-        points: site.points,
-        metrics: site.metrics,
-        isClosed: site.is_closed,
+        points: typeof site.points === 'string' ? JSON.parse(site.points) : site.points,
+        metrics: typeof site.metrics === 'string' ? JSON.parse(site.metrics) : site.metrics,
+        isClosed: !!site.is_closed,
         customTileUrl: site.custom_tile_url,
         contractorCommitmentPerDay: site.contractor_commitment_per_day ? parseFloat(site.contractor_commitment_per_day) : undefined,
-        dailyProgress: site.daily_progress || []
+        dailyProgress: typeof site.daily_progress === 'string' ? JSON.parse(site.daily_progress) : site.daily_progress
       });
     } catch (err) {
       console.error(err);
@@ -199,11 +209,8 @@ async function startServer() {
     }
   });
 
-  // Initialize DB (optional, usually run migrations separately but good for dev)
-  // Only attempt if we have a connection string
-  if (process.env.DATABASE_URL) {
-    await initDb();
-  }
+  // Always initialize SQLite for demo
+  await initDb();
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
