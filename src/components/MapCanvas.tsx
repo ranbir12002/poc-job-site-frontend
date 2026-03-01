@@ -23,9 +23,11 @@ interface MapCanvasProps {
   customTileUrl?: string;
   showCustomTiles?: boolean;
   snapToPoints?: boolean;
+  pathThickness?: number;
+  approved?: boolean;
 }
 
-function MapEvents({ onMapClick, isDrawing, isFinished, snapToPoints, points, onPointsChange }: { 
+function MapEvents({ onMapClick, isDrawing, isFinished, snapToPoints, points, onPointsChange }: {
   onMapClick?: (e: L.LeafletMouseEvent) => void;
   isDrawing: boolean;
   isFinished: boolean;
@@ -34,7 +36,7 @@ function MapEvents({ onMapClick, isDrawing, isFinished, snapToPoints, points, on
   onPointsChange: (points: Point[]) => void;
 }) {
   const map = useMap();
-  
+
   useMapEvents({
     click: (e) => {
       if (isDrawing && !isFinished) {
@@ -80,8 +82,59 @@ function MapUpdater({ center }: { center?: [number, number] }) {
   return null;
 }
 
-export function MapCanvas({ points, onPointsChange, isDrawing, isFinished, isClosed = true, center, customTileUrl, showCustomTiles = false, snapToPoints = false }: MapCanvasProps) {
+/**
+ * Compute a buffer (offset) polygon around a polyline.
+ * thicknessMeters is in meters; we approximate the offset in degrees.
+ */
+function computeBufferPolygon(points: Point[], thicknessMeters: number): [number, number][] {
+  if (points.length < 2 || thicknessMeters <= 0) return [];
+
+  // Convert meters to approximate degrees (at the average latitude)
+  const avgLat = points.reduce((s, p) => s + p.lat, 0) / points.length;
+  const metersPerDegreeLat = 111320;
+  const metersPerDegreeLng = 111320 * Math.cos((avgLat * Math.PI) / 180);
+  const offsetLat = thicknessMeters / metersPerDegreeLat;
+  const offsetLng = thicknessMeters / metersPerDegreeLng;
+
+  const leftSide: [number, number][] = [];
+  const rightSide: [number, number][] = [];
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+
+    // Direction vector
+    const dx = (p2.lng - p1.lng) / (offsetLng || 1) * offsetLng;
+    const dy = (p2.lat - p1.lat) / (offsetLat || 1) * offsetLat;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) continue;
+
+    // Perpendicular normal (left and right)
+    const nx = (-dy / len) * offsetLat;
+    const ny = (dx / len) * offsetLng;
+
+    if (i === 0) {
+      leftSide.push([p1.lat + nx, p1.lng + ny]);
+      rightSide.push([p1.lat - nx, p1.lng - ny]);
+    }
+    leftSide.push([p2.lat + nx, p2.lng + ny]);
+    rightSide.push([p2.lat - nx, p2.lng - ny]);
+  }
+
+  // Combine: left side forward, right side reversed to form a closed polygon
+  rightSide.reverse();
+  return [...leftSide, ...rightSide];
+}
+
+export function MapCanvas({ points, onPointsChange, isDrawing, isFinished, isClosed = true, center, customTileUrl, showCustomTiles = false, snapToPoints = false, pathThickness = 0, approved = false }: MapCanvasProps) {
   const positions = useMemo(() => points.map((p) => [p.lat, p.lng] as [number, number]), [points]);
+
+  const bufferPositions = useMemo(() => {
+    if (pathThickness <= 0 || points.length < 2 || isClosed) return [];
+    return computeBufferPolygon(points, pathThickness);
+  }, [points, pathThickness, isClosed]);
+
+  const bufferColor = approved ? '#22c55e' : '#3b82f6';
 
   return (
     <MapContainer
@@ -95,7 +148,7 @@ export function MapCanvas({ points, onPointsChange, isDrawing, isFinished, isClo
         url={mapStyle.tileLayer.url}
         maxZoom={mapStyle.tileLayer.maxZoom}
       />
-      
+
       {/* Custom Drone Tiles Layer */}
       {showCustomTiles && customTileUrl && (
         <TileLayer
@@ -113,25 +166,37 @@ export function MapCanvas({ points, onPointsChange, isDrawing, isFinished, isClo
           url={mapStyle.overlayLayer.url}
         />
       )}
-      <MapEvents 
-        isDrawing={isDrawing} 
-        isFinished={isFinished} 
-        snapToPoints={snapToPoints} 
-        points={points} 
-        onPointsChange={onPointsChange} 
+      <MapEvents
+        isDrawing={isDrawing}
+        isFinished={isFinished}
+        snapToPoints={snapToPoints}
+        points={points}
+        onPointsChange={onPointsChange}
       />
       <MapUpdater center={center} />
-      
+
       {!isFinished && positions.length > 0 && (
         <Polyline positions={positions} color="#3b82f6" weight={3} dashArray="5, 10" />
       )}
-      
+
       {isFinished && positions.length > 1 && (
         isClosed ? (
           <Polygon positions={positions} color="#3b82f6" fillColor="#3b82f6" fillOpacity={0.2} weight={3} />
         ) : (
-          <Polyline positions={positions} color="#3b82f6" weight={3} />
+          <Polyline positions={positions} color={approved ? '#22c55e' : '#3b82f6'} weight={3} />
         )
+      )}
+
+      {/* Path Thickness Buffer Overlay */}
+      {isFinished && bufferPositions.length > 0 && (
+        <Polygon
+          positions={bufferPositions}
+          color={bufferColor}
+          fillColor={bufferColor}
+          fillOpacity={0.25}
+          weight={1}
+          opacity={0.5}
+        />
       )}
 
       {points.map((p, idx) => (
@@ -148,7 +213,7 @@ export function calculateMetrics(points: Point[], isClosed: boolean = true): Sit
 
   let perimeter = 0;
   const limit = isClosed ? points.length : points.length - 1;
-  
+
   for (let i = 0; i < limit; i++) {
     const p1 = L.latLng(points[i].lat, points[i].lng);
     const p2 = L.latLng(points[(i + 1) % points.length].lat, points[(i + 1) % points.length].lng);
@@ -164,3 +229,4 @@ export function calculateMetrics(points: Point[], isClosed: boolean = true): Sit
     estimatedWalkTimeMinutes: Math.round(walkTime * 10) / 10,
   };
 }
+

@@ -127,7 +127,9 @@ async function startServer() {
               isClosed: !!site.is_closed,
               customTileUrl: site.custom_tile_url,
               contractorCommitmentPerDay: site.contractor_commitment_per_day ? parseFloat(site.contractor_commitment_per_day) : undefined,
-              dailyProgress: dailyProgress || []
+              dailyProgress: dailyProgress || [],
+              pathThickness: site.path_thickness ? parseFloat(site.path_thickness) : 0,
+              approved: !!site.approved
             };
           })
         };
@@ -156,12 +158,12 @@ async function startServer() {
 
   app.post('/api/projects/:id/sites', async (req, res) => {
     const { id: projectId } = req.params;
-    const { name, createdAt, points, metrics, isClosed, customTileUrl, contractorCommitmentPerDay, dailyProgress } = req.body;
+    const { name, createdAt, points, metrics, isClosed, customTileUrl, contractorCommitmentPerDay, dailyProgress, pathThickness, approved } = req.body;
     const siteId = uuidv4();
     try {
       await pool.query(
-        'INSERT INTO sites (id, project_id, name, created_at, points, metrics, is_closed, custom_tile_url, contractor_commitment_per_day, daily_progress) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-        [siteId, projectId, name, createdAt, JSON.stringify(points), JSON.stringify(metrics), isClosed ? 1 : 0, customTileUrl, contractorCommitmentPerDay, JSON.stringify(dailyProgress || [])]
+        'INSERT INTO sites (id, project_id, name, created_at, points, metrics, is_closed, custom_tile_url, contractor_commitment_per_day, daily_progress, path_thickness, approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+        [siteId, projectId, name, createdAt, JSON.stringify(points), JSON.stringify(metrics), isClosed ? 1 : 0, customTileUrl, contractorCommitmentPerDay, JSON.stringify(dailyProgress || []), pathThickness || 0, approved ? 1 : 0]
       );
       res.json({
         id: siteId,
@@ -173,7 +175,9 @@ async function startServer() {
         isClosed,
         customTileUrl,
         contractorCommitmentPerDay,
-        dailyProgress: dailyProgress || []
+        dailyProgress: dailyProgress || [],
+        pathThickness: pathThickness || 0,
+        approved: !!approved
       });
     } catch (err) {
       console.error(err);
@@ -183,11 +187,11 @@ async function startServer() {
 
   app.put('/api/sites/:id', async (req, res) => {
     const { id } = req.params;
-    const { points, metrics, isClosed, customTileUrl, contractorCommitmentPerDay, dailyProgress } = req.body;
+    const { points, metrics, isClosed, customTileUrl, contractorCommitmentPerDay, dailyProgress, pathThickness, approved } = req.body;
     try {
       const result = await pool.query(
-        'UPDATE sites SET points = $1, metrics = $2, is_closed = $3, custom_tile_url = $4, contractor_commitment_per_day = $5, daily_progress = $6 WHERE id = $7 RETURNING *',
-        [JSON.stringify(points), JSON.stringify(metrics), isClosed ? 1 : 0, customTileUrl, contractorCommitmentPerDay, JSON.stringify(dailyProgress || []), id]
+        'UPDATE sites SET points = $1, metrics = $2, is_closed = $3, custom_tile_url = $4, contractor_commitment_per_day = $5, daily_progress = $6, path_thickness = $7, approved = $8 WHERE id = $9 RETURNING *',
+        [JSON.stringify(points), JSON.stringify(metrics), isClosed ? 1 : 0, customTileUrl, contractorCommitmentPerDay, JSON.stringify(dailyProgress || []), pathThickness || 0, approved ? 1 : 0, id]
       );
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Site not found' });
@@ -201,7 +205,9 @@ async function startServer() {
         isClosed: !!site.is_closed,
         customTileUrl: site.custom_tile_url,
         contractorCommitmentPerDay: site.contractor_commitment_per_day ? parseFloat(site.contractor_commitment_per_day) : undefined,
-        dailyProgress: typeof site.daily_progress === 'string' ? JSON.parse(site.daily_progress) : site.daily_progress
+        dailyProgress: typeof site.daily_progress === 'string' ? JSON.parse(site.daily_progress) : site.daily_progress,
+        pathThickness: site.path_thickness ? parseFloat(site.path_thickness) : 0,
+        approved: !!site.approved
       });
     } catch (err) {
       console.error(err);

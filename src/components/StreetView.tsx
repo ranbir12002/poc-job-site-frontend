@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, CheckCircle, Route, Navigation, Flag } from 'lucide-react';
 import { ReactPhotoSphereViewer } from 'react-photo-sphere-viewer';
 import { VirtualTourPlugin } from '@photo-sphere-viewer/virtual-tour-plugin';
 import { MapContainer, TileLayer, Polygon, Polyline, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Site, Point } from '../types';
 import { VideoUploader } from './VideoUploader';
+import { calculateDistance, calculateTotalDistance } from '../lib/utils';
 import '@photo-sphere-viewer/core/index.css';
 import '@photo-sphere-viewer/virtual-tour-plugin/index.css';
 
@@ -21,6 +22,7 @@ interface TourNode {
 interface StreetViewProps {
   site: Site;
   onClose: () => void;
+  onApprove?: () => void;
 }
 
 // Custom icon for the active node in the minimap
@@ -35,6 +37,15 @@ const activeIcon = L.icon({
 
 const defaultIcon = L.icon({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const approvedIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -102,11 +113,12 @@ function createArrowElement(): HTMLElement {
   return wrapper;
 }
 
-export function StreetView({ site, onClose }: StreetViewProps) {
+export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
   const psvRef = useRef<any>(null);
   const [currentNodeId, setCurrentNodeId] = useState<string>('');
   const [nodes, setNodes] = useState<TourNode[]>([]);
   const [showUploader, setShowUploader] = useState(false);
+  const [isApproved, setIsApproved] = useState(site.approved || false);
 
   useEffect(() => {
     // Generate nodes based on site points (original behavior)
@@ -220,6 +232,68 @@ export function StreetView({ site, onClose }: StreetViewProps) {
   const mapCenter: [number, number] = currentNode?.position
     ? [currentNode.position.lat, currentNode.position.lng]
     : (positions[0] || [51.505, -0.09]);
+
+  // --- Metrics Calculations ---
+  const validPositions = useMemo(() => {
+    return nodes
+      .filter(n => n.position)
+      .map(n => ({ lat: n.position!.lat, lng: n.position!.lng }));
+  }, [nodes]);
+
+  const { totalDistance, progressPct, distFromStart } = useMemo(() => {
+    if (validPositions.length < 2) {
+      return { totalDistance: 0, progressPct: 0, distFromStart: 0 };
+    }
+
+    // Total Path Distance
+    const total = calculateTotalDistance(validPositions);
+
+    // Distance from previous and Cumulative distance to current node
+    let cumulative = 0;
+    let fromPrev = 0;
+
+    // Calculate progress up to currentIndex
+    // Ensure currentIndex is valid
+    const safeCurrIndex = Math.max(0, Math.min(currentIndex, validPositions.length - 1));
+
+    // Distance from start to current point (straight line distance, not cumulative path)
+    let fromStart = 0;
+    if (safeCurrIndex > 0) {
+      const pStart = validPositions[0];
+      const pCurr = validPositions[safeCurrIndex];
+      fromStart = calculateDistance(pStart.lat, pStart.lng, pCurr.lat, pCurr.lng);
+    }
+
+    for (let i = 1; i <= safeCurrIndex; i++) {
+      const p1 = validPositions[i - 1];
+      const p2 = validPositions[i];
+      const dist = calculateDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+      cumulative += dist;
+    }
+
+    const pct = total > 0 ? (cumulative / total) * 100 : 0;
+
+    return {
+      totalDistance: total,
+      progressPct: pct,
+      distFromStart: fromStart
+    };
+  }, [validPositions, currentIndex]);
+
+  const MetricItem = ({ icon: Icon, label, value, unit }: { icon: any, label: string, value: string | number, unit?: string }) => (
+    <div className="flex items-center gap-4 py-3 group">
+      <div className="p-3 bg-white/5 rounded-2xl group-hover:bg-white/10 transition-colors border border-white/5 shadow-inner">
+        <Icon className="w-5 h-5 text-indigo-300" />
+      </div>
+      <div>
+        <p className="text-xs text-white/50 font-medium uppercase tracking-wider mb-0.5">{label}</p>
+        <div className="flex items-baseline gap-1">
+          <span className="text-xl font-semibold text-white tracking-tight">{value}</span>
+          {unit && <span className="text-sm text-white/50 font-medium">{unit}</span>}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="absolute inset-0 z-50 bg-black animate-in fade-in duration-500 rounded-[inherit] overflow-hidden">
@@ -347,7 +421,7 @@ export function StreetView({ site, onClose }: StreetViewProps) {
               <Marker
                 key={node.id}
                 position={[node.position!.lat, node.position!.lng]}
-                icon={node.id === currentNodeId ? activeIcon : defaultIcon}
+                icon={node.id === currentNodeId ? activeIcon : (isApproved ? approvedIcon : defaultIcon)}
                 eventHandlers={{
                   click: () => navigateToNode(node.id)
                 }}
@@ -357,11 +431,67 @@ export function StreetView({ site, onClose }: StreetViewProps) {
         </div>
       )}
 
+      {/* Metrics Panel (Left Side) - Apple Glass Style */}
+      {nodes.length > 1 && (
+        <div className="absolute bottom-28 left-6 w-72 z-20 animate-in fade-in slide-in-from-left-4 duration-500">
+          <div
+            className="rounded-3xl overflow-hidden backdrop-blur-3xl border border-white/10 shadow-2xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(20,20,30,0.6) 0%, rgba(10,10,15,0.7) 100%)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.1)',
+            }}
+          >
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-white/5 bg-white/5">
+              <h3 className="text-sm font-semibold text-white/90 flex items-center gap-2">
+                <Route className="w-4 h-4 text-indigo-400" />
+                Tour Metrics
+              </h3>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-2">
+              <MetricItem
+                icon={Navigation}
+                label="Dist. from Start"
+                value={distFromStart.toFixed(1)}
+                unit="m"
+              />
+              <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent my-1" />
+              <MetricItem
+                icon={Route}
+                label="Total Distance"
+                value={totalDistance.toFixed(1)}
+                unit="m"
+              />
+
+              {/* Progress Bar Item */}
+              <div className="pt-3">
+                <div className="flex justify-between items-end mb-2">
+                  <p className="text-xs text-white/50 font-medium uppercase tracking-wider flex items-center gap-1.5">
+                    <Flag className="w-3.5 h-3.5 text-emerald-400" />
+                    Progress
+                  </p>
+                  <span className="text-sm font-semibold text-white">{Math.round(progressPct)}%</span>
+                </div>
+                <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 shadow-inner">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-500 ease-out"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ═══════════════════════════════════════════════ */}
       {/* Apple Glass Slider — Bottom Navigation Bar     */}
       {/* ═══════════════════════════════════════════════ */}
       {nodes.length > 1 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[90%] max-w-xl">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[95%] max-w-4xl">
           <div
             className="flex items-center gap-3 px-5 py-3 rounded-[1.75rem]"
             style={{
@@ -408,6 +538,32 @@ export function StreetView({ site, onClose }: StreetViewProps) {
               <span className="mx-0.5">/</span>
               <span>{nodes.length}</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approval Button — appears at last node */}
+      {nodes.length > 1 && currentIndex === nodes.length - 1 && !isApproved && onApprove && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 animate-in fade-in slide-in-from-top duration-500">
+          <button
+            onClick={() => {
+              setIsApproved(true);
+              onApprove();
+            }}
+            className="flex items-center gap-3 px-8 py-4 bg-emerald-500/90 hover:bg-emerald-500 text-white rounded-2xl backdrop-blur-xl border border-emerald-400/30 transition-all shadow-2xl font-semibold text-lg"
+          >
+            <CheckCircle size={24} />
+            Approve Section
+          </button>
+        </div>
+      )}
+
+      {/* Approved Badge */}
+      {isApproved && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20">
+          <div className="flex items-center gap-2 px-6 py-3 bg-emerald-500/20 text-emerald-400 rounded-2xl backdrop-blur-xl border border-emerald-500/30 font-medium">
+            <CheckCircle size={20} />
+            Section Approved
           </div>
         </div>
       )}

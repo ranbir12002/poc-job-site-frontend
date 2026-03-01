@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Undo, Check, Ruler, Clock, MapPin, Trash2, Search, ToggleLeft, ToggleRight, Eye, Layers, Settings, Activity, Plus, X, Magnet } from 'lucide-react';
+import { ArrowLeft, Save, Undo, Check, Ruler, Clock, MapPin, Trash2, Search, ToggleLeft, ToggleRight, Eye, Layers, Settings, Activity, Plus, X, Magnet, Move } from 'lucide-react';
 import { Site, Point, DailyProgress } from '../types';
 import { MapCanvas, calculateMetrics } from './MapCanvas';
 import { v4 as uuidv4 } from 'uuid';
@@ -22,7 +22,7 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
   );
   const [isSearching, setIsSearching] = useState(false);
   const [snapToPoints, setSnapToPoints] = useState(true);
-  
+
   // Custom Tiles State
   const [customTileUrl, setCustomTileUrl] = useState(site.customTileUrl || '');
   const [showCustomTiles, setShowCustomTiles] = useState(!!site.customTileUrl);
@@ -34,6 +34,10 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
   const [dailyProgress, setDailyProgress] = useState<DailyProgress[]>(site.dailyProgress || []);
   const [newProgressMeters, setNewProgressMeters] = useState<string>('');
   const [newProgressNotes, setNewProgressNotes] = useState<string>('');
+
+  // Path Thickness State
+  const [pathThickness, setPathThickness] = useState<number>(site.pathThickness || 0);
+  const [approved, setApproved] = useState<boolean>(site.approved || false);
 
   const metrics = calculateMetrics(points, isClosed);
 
@@ -71,6 +75,8 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
       customTileUrl: customTileUrl || undefined,
       contractorCommitmentPerDay: contractorCommitment,
       dailyProgress,
+      pathThickness,
+      approved,
     });
   };
 
@@ -98,7 +104,7 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
-    
+
     setIsSearching(true);
 
     // Check if the query is a coordinate pair (e.g., "40.7128, -74.0060" or "40.7128 -74.0060")
@@ -145,6 +151,8 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
           customTileUrl={customTileUrl}
           showCustomTiles={showCustomTiles}
           snapToPoints={snapToPoints}
+          pathThickness={pathThickness}
+          approved={approved}
         />
       </div>
 
@@ -157,7 +165,7 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
               <X size={20} />
             </button>
           </div>
-          
+
           <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8">
             {/* Metrics Summary */}
             <div className="grid grid-cols-2 gap-4">
@@ -227,16 +235,15 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
                           <div className="text-white font-medium">{p.metersCompleted} meters</div>
                           <div className="text-white/40 text-xs">{new Date(p.date).toLocaleDateString()}</div>
                         </div>
-                        <div className={`text-xs px-2 py-1 rounded-full ${
-                          p.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' :
+                        <div className={`text-xs px-2 py-1 rounded-full ${p.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' :
                           p.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
-                          'bg-amber-500/20 text-amber-400'
-                        }`}>
+                            'bg-amber-500/20 text-amber-400'
+                          }`}>
                           {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
                         </div>
                       </div>
                       {p.notes && <p className="text-white/60 text-sm">{p.notes}</p>}
-                      
+
                       {p.status === 'pending' && (
                         <div className="flex gap-2 mt-2 pt-3 border-t border-white/10">
                           <button
@@ -296,7 +303,7 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
               )}
             </form>
-            
+
             {searchResults.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-2 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl max-h-60 overflow-y-auto">
                 {searchResults.map((result, idx) => (
@@ -325,9 +332,8 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
             <div className="relative">
               <button
                 onClick={() => setShowTileSettings(!showTileSettings)}
-                className={`flex items-center gap-2 px-4 py-3 rounded-2xl backdrop-blur-xl border transition-all shadow-2xl font-medium ${
-                  showCustomTiles ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'
-                }`}
+                className={`flex items-center gap-2 px-4 py-3 rounded-2xl backdrop-blur-xl border transition-all shadow-2xl font-medium ${showCustomTiles ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'
+                  }`}
                 title="Custom Drone Tiles"
               >
                 <Layers size={18} />
@@ -340,10 +346,10 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
                   <h4 className="text-white font-medium mb-2">Custom Tile Layer</h4>
                   <p className="text-white/50 text-xs mb-4">
                     Enter the URL template for your Cloudflare R2 / S3 bucket tiles, or select a preset.
-                    <br/><br/>
+                    <br /><br />
                     Format: <code className="bg-white/10 px-1 rounded">https://your-bucket.r2.dev/site-id/&#123;z&#125;/&#123;x&#125;/&#123;y&#125;.png</code>
                   </p>
-                  
+
                   <div className="mb-4">
                     <button
                       onClick={() => setCustomTileUrl('https://tiles.openaerialmap.org/6997a0554555c9ccdd1be537/0/6997a0554555c9ccdd1be538/{z}/{x}/{y}')}
@@ -363,8 +369,8 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
                   />
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         checked={showCustomTiles}
                         onChange={(e) => setShowCustomTiles(e.target.checked)}
                         disabled={!customTileUrl}
@@ -372,7 +378,7 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
                       />
                       Enable Layer
                     </label>
-                    <button 
+                    <button
                       onClick={() => setShowTileSettings(false)}
                       className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-white transition-colors"
                     >
@@ -398,7 +404,7 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
           {/* Metrics Panel */}
           <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl w-full md:w-80 flex flex-col gap-6">
             <h3 className="text-white/80 font-medium text-sm uppercase tracking-wider">Site Metrics</h3>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-white/50 text-xs uppercase tracking-wider">
@@ -430,6 +436,34 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
                 </span>
               </div>
             </div>
+
+            {/* Path Thickness Slider (open paths only) */}
+            {!isClosed && points.length > 1 && (
+              <div className="flex flex-col gap-2 pt-4 border-t border-white/10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-white/50 text-xs uppercase tracking-wider">
+                    <Move size={14} />
+                    <span>Path Thickness</span>
+                  </div>
+                  <span className="text-sm font-mono text-white/80">{pathThickness} <span className="text-white/40">m</span></span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={50}
+                  step={1}
+                  value={pathThickness}
+                  onChange={(e) => setPathThickness(Number(e.target.value))}
+                  className="w-full accent-blue-500"
+                />
+                {approved && (
+                  <div className="flex items-center gap-2 text-emerald-400 text-xs mt-1">
+                    <Check size={12} />
+                    <span>Section Approved</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Drawing Controls */}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Plus, MapPin, ChevronRight, Ruler, Clock, Video, Layers, Eye } from 'lucide-react';
+import { ArrowLeft, Plus, MapPin, ChevronRight, Ruler, Clock, Video, Layers, Eye, Box } from 'lucide-react';
 import { Project, Site } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -10,9 +10,10 @@ interface ProjectViewProps {
   onStreetViewSelect: (site: Site) => void;
   onCreateSite: (site: Site) => void;
   onRecordSite: () => void;
+  onViewInventory: () => void;
 }
 
-export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect, onCreateSite, onRecordSite }: ProjectViewProps) {
+export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect, onCreateSite, onRecordSite, onViewInventory }: ProjectViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newSiteName, setNewSiteName] = useState('');
 
@@ -53,6 +54,13 @@ export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect,
           >
             <Video size={20} />
             <span className="hidden sm:inline">Record Site</span>
+          </button>
+          <button
+            onClick={onViewInventory}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-full backdrop-blur-md border border-indigo-500/20 transition-all shadow-lg"
+          >
+            <Box size={20} />
+            <span className="hidden sm:inline">Pipe Inventory</span>
           </button>
           <button
             onClick={() => setIsCreating(true)}

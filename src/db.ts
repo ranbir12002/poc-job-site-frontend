@@ -57,7 +57,9 @@ export async function initDb() {
         is_closed INTEGER DEFAULT 1,
         custom_tile_url TEXT,
         contractor_commitment_per_day REAL,
-        daily_progress TEXT NOT NULL DEFAULT '[]'
+        daily_progress TEXT NOT NULL DEFAULT '[]',
+        path_thickness REAL DEFAULT 0,
+        approved INTEGER DEFAULT 0
       );
     `);
     console.log('SQLite database initialized successfully');

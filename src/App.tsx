@@ -10,6 +10,7 @@ import { SiteEditor } from './components/SiteEditor';
 import { SiteRecorder } from './components/SiteRecorder';
 import { StreetView } from './components/StreetView';
 import { SignIn } from './components/SignIn';
+import { PipeInventory } from './components/PipeInventory';
 import { Project, Site } from './types';
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
   const [currentSite, setCurrentSite] = useState<Site | null>(null);
   const [currentStreetViewSite, setCurrentStreetViewSite] = useState<Site | null>(null);
   const [isRecordingSite, setIsRecordingSite] = useState(false);
+  const [currentProjectInventory, setCurrentProjectInventory] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -72,7 +74,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(site),
       });
-      
+
       let newSite = site;
       if (res.ok) {
         newSite = await res.json();
@@ -85,8 +87,8 @@ export default function App() {
       setProjects(projects.map((p) => (p.id === currentProject.id ? updatedProject : p)));
       setCurrentProject(updatedProject);
     } catch (err) {
-       // Fallback
-       const updatedProject = {
+      // Fallback
+      const updatedProject = {
         ...currentProject,
         sites: [...currentProject.sites, site],
       };
@@ -116,6 +118,42 @@ export default function App() {
     setCurrentSite(null); // Go back to project view
   };
 
+  const handleUpdateProject = async (updatedProject: Project) => {
+    try {
+      await fetch(`/api/projects/${updatedProject.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedProject),
+      });
+    } catch (err) {
+      console.error('Failed to update project:', err);
+    }
+    setProjects(projects.map((p) => (p.id === updatedProject.id ? updatedProject : p)));
+    setCurrentProject(updatedProject);
+  };
+
+  const handleApproveSite = async () => {
+    if (!currentProject || !currentStreetViewSite) return;
+    const approvedSite = { ...currentStreetViewSite, approved: true };
+    try {
+      await fetch(`/api/sites/${approvedSite.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(approvedSite),
+      });
+    } catch (err) {
+      console.error('Failed to approve site:', err);
+    }
+
+    const updatedProject = {
+      ...currentProject,
+      sites: currentProject.sites.map((s) => (s.id === approvedSite.id ? approvedSite : s)),
+    };
+    setProjects(projects.map((p) => (p.id === currentProject.id ? updatedProject : p)));
+    setCurrentProject(updatedProject);
+    setCurrentStreetViewSite(approvedSite);
+  };
+
   if (!isAuthenticated) {
     return <SignIn onSignIn={() => setIsAuthenticated(true)} />;
   }
@@ -131,9 +169,9 @@ export default function App() {
       </div>
 
       {/* Main Content Area */}
-      <main className="relative z-10 h-screen w-full p-4 md:p-8 flex items-center justify-center">
-        <div className="w-full max-w-7xl h-full bg-white/[0.02] backdrop-blur-3xl border border-white/[0.05] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col relative">
-          {!currentProject && !currentSite && !currentStreetViewSite && !isRecordingSite && (
+      <main className="relative z-10 h-screen w-full p-2 md:p-6 flex items-center justify-center">
+        <div className="w-full max-w-[98%] xl:max-w-[95%] h-[95vh] bg-white/[0.02] backdrop-blur-3xl border border-white/[0.05] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col relative">
+          {!currentProject && !currentSite && !currentStreetViewSite && !isRecordingSite && !currentProjectInventory && (
             <Dashboard
               projects={projects}
               onProjectSelect={setCurrentProject}
@@ -141,7 +179,7 @@ export default function App() {
             />
           )}
 
-          {currentProject && !currentSite && !currentStreetViewSite && !isRecordingSite && (
+          {currentProject && !currentSite && !currentStreetViewSite && !isRecordingSite && !currentProjectInventory && (
             <ProjectView
               project={currentProject}
               onBack={() => setCurrentProject(null)}
@@ -149,6 +187,15 @@ export default function App() {
               onStreetViewSelect={setCurrentStreetViewSite}
               onCreateSite={handleCreateSite}
               onRecordSite={() => setIsRecordingSite(true)}
+              onViewInventory={() => setCurrentProjectInventory(true)}
+            />
+          )}
+
+          {currentProject && currentProjectInventory && (
+            <PipeInventory
+              project={currentProject}
+              onBack={() => setCurrentProjectInventory(false)}
+              onUpdateProject={handleUpdateProject}
             />
           )}
 
@@ -164,6 +211,7 @@ export default function App() {
             <StreetView
               site={currentStreetViewSite}
               onClose={() => setCurrentStreetViewSite(null)}
+              onApprove={handleApproveSite}
             />
           )}
 

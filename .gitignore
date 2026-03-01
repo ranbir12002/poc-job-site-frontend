@@ -8,3 +8,4 @@ coverage/
 !.env.example
 public/uploads/
 public/frames/
+database.sqlite
