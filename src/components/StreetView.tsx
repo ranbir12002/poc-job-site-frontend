@@ -198,41 +198,6 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
     return nodes.findIndex(n => n.id === currentNodeId);
   }, [nodes, currentNodeId]);
 
-  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const idx = parseInt(e.target.value, 10);
-    if (nodes[idx]) {
-      navigateToNode(nodes[idx].id);
-    }
-  };
-
-  const handlePrev = () => {
-    if (currentIndex > 0) navigateToNode(nodes[currentIndex - 1].id);
-  };
-
-  const handleNext = () => {
-    if (currentIndex < nodes.length - 1) navigateToNode(nodes[currentIndex + 1].id);
-  };
-
-  // If showing the uploader
-  if (showUploader) {
-    return (
-      <div className="absolute inset-0 z-50 bg-black animate-in fade-in duration-500 rounded-[inherit] overflow-hidden">
-        <VideoUploader
-          onTourReady={handleTourReady}
-          onCancel={onClose}
-        />
-      </div>
-    );
-  }
-
-  const positions = nodes
-    .filter(n => n.position)
-    .map((n) => [n.position!.lat, n.position!.lng] as [number, number]);
-  const currentNode = nodes.find(n => n.id === currentNodeId);
-  const mapCenter: [number, number] = currentNode?.position
-    ? [currentNode.position.lat, currentNode.position.lng]
-    : (positions[0] || [51.505, -0.09]);
-
   // --- Metrics Calculations ---
   const validPositions = useMemo(() => {
     return nodes
@@ -279,6 +244,41 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
       distFromStart: fromStart
     };
   }, [validPositions, currentIndex]);
+
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const idx = parseInt(e.target.value, 10);
+    if (nodes[idx]) {
+      navigateToNode(nodes[idx].id);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentIndex > 0) navigateToNode(nodes[currentIndex - 1].id);
+  };
+
+  const handleNext = () => {
+    if (currentIndex < nodes.length - 1) navigateToNode(nodes[currentIndex + 1].id);
+  };
+
+  // If showing the uploader
+  if (showUploader) {
+    return (
+      <div className="absolute inset-0 z-50 bg-black animate-in fade-in duration-500 rounded-[inherit] overflow-hidden">
+        <VideoUploader
+          onTourReady={handleTourReady}
+          onCancel={onClose}
+        />
+      </div>
+    );
+  }
+
+  const positions = nodes
+    .filter(n => n.position)
+    .map((n) => [n.position!.lat, n.position!.lng] as [number, number]);
+  const currentNode = nodes.find(n => n.id === currentNodeId);
+  const mapCenter: [number, number] = currentNode?.position
+    ? [currentNode.position.lat, currentNode.position.lng]
+    : (positions[0] || [51.505, -0.09]);
 
   const MetricItem = ({ icon: Icon, label, value, unit }: { icon: any, label: string, value: string | number, unit?: string }) => (
     <div className="flex items-center gap-4 py-3 group">
