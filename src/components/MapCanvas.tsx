@@ -138,7 +138,7 @@ export function MapCanvas({ points, onPointsChange, isDrawing, isFinished, isClo
 
   return (
     <MapContainer
-      center={center || [51.505, -0.09]}
+      center={center || [25.7617, -80.1918]}
       zoom={13}
       style={{ height: '100%', width: '100%', borderRadius: 'inherit' }}
       zoomControl={false}

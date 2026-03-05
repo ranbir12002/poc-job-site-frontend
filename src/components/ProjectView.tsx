@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Plus, MapPin, ChevronRight, Ruler, Clock, Video, Layers, Eye, Box } from 'lucide-react';
+import { ArrowLeft, Plus, MapPin, ChevronRight, Ruler, Clock, Video, Layers, Eye, Box, Trash2 } from 'lucide-react';
 import { Project, Site } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -11,11 +11,13 @@ interface ProjectViewProps {
   onCreateSite: (site: Site) => void;
   onRecordSite: () => void;
   onViewInventory: () => void;
+  onDeleteSite: (siteId: string) => void;
 }
 
-export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect, onCreateSite, onRecordSite, onViewInventory }: ProjectViewProps) {
+export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect, onCreateSite, onRecordSite, onViewInventory, onDeleteSite }: ProjectViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newSiteName, setNewSiteName] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleCreate = () => {
     if (!newSiteName.trim()) return;
@@ -104,47 +106,76 @@ export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect,
             key={site.id}
             className="group p-6 bg-white/[0.03] hover:bg-white/[0.08] backdrop-blur-xl border border-white/[0.05] hover:border-white/[0.15] rounded-3xl shadow-xl transition-all duration-300 flex flex-col gap-4"
           >
-            <div className="flex items-center justify-between">
-              <div className="p-3 bg-white/5 rounded-2xl text-white/70 group-hover:text-white group-hover:scale-110 transition-all">
-                <MapPin size={28} strokeWidth={1.5} />
-              </div>
-            </div>
-            <div>
-              <h3 className="text-xl font-medium text-white/90">{site.name}</h3>
-              <div className="flex items-center gap-4 mt-3 text-white/50 text-sm">
-                <div className="flex items-center gap-1.5">
-                  <Ruler size={14} />
-                  <span>{site.metrics.perimeterMeters.toLocaleString()} m</span>
+            {confirmDeleteId === site.id ? (
+              <div className="flex flex-col items-center gap-3 py-4">
+                <p className="text-white/80 text-sm text-center">Delete <strong>{site.name}</strong>?</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { onDeleteSite(site.id); setConfirmDeleteId(null); }}
+                    className="px-5 py-2 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="px-5 py-2 bg-white/5 hover:bg-white/10 text-white/70 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <Clock size={14} />
-                  <span>{site.metrics.estimatedWalkTimeMinutes} min</span>
-                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="p-3 bg-white/5 rounded-2xl text-white/70 group-hover:text-white group-hover:scale-110 transition-all">
+                    <MapPin size={28} strokeWidth={1.5} />
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(site.id); }}
+                    className="p-2 text-white/30 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                    title="Delete site"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+                <div>
+                  <h3 className="text-xl font-medium text-white/90">{site.name}</h3>
+                  <div className="flex items-center gap-4 mt-3 text-white/50 text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <Ruler size={14} />
+                      <span>{site.metrics.perimeterMeters.toLocaleString()} m</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Clock size={14} />
+                      <span>{site.metrics.estimatedWalkTimeMinutes} min</span>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="mt-2 flex gap-3 pt-4 border-t border-white/10">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSiteSelect(site);
-                }}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded-xl transition-colors text-sm font-medium"
-              >
-                <Layers size={16} />
-                Map View
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStreetViewSelect(site);
-                }}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors text-sm font-medium"
-              >
-                <Eye size={16} />
-                Street View
-              </button>
-            </div>
+                <div className="mt-2 flex gap-3 pt-4 border-t border-white/10">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSiteSelect(site);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded-xl transition-colors text-sm font-medium"
+                  >
+                    <Layers size={16} />
+                    Map View
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStreetViewSelect(site);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors text-sm font-medium"
+                  >
+                    <Eye size={16} />
+                    Street View
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ))}
         {project.sites.length === 0 && !isCreating && (

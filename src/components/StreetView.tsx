@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, CheckCircle, Route, Navigation, Flag } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, CheckCircle, Route, Navigation, Flag, Layers, Eye } from 'lucide-react';
 import { ReactPhotoSphereViewer } from 'react-photo-sphere-viewer';
 import { VirtualTourPlugin } from '@photo-sphere-viewer/virtual-tour-plugin';
 import { MapContainer, TileLayer, Polygon, Polyline, Marker, useMap } from 'react-leaflet';
@@ -119,23 +119,36 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
   const [nodes, setNodes] = useState<TourNode[]>([]);
   const [showUploader, setShowUploader] = useState(false);
   const [isApproved, setIsApproved] = useState(site.approved || false);
+  const [showDepthMap, setShowDepthMap] = useState(false);
 
+  const samplePanos = useMemo(() => [
+    'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-1.jpg',
+    'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-2.jpg',
+    'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-3.jpg',
+    'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-4.jpg',
+    'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-5.jpg',
+    'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-6.jpg',
+    'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-7.jpg',
+  ], []);
+
+  const depthPanos = useMemo(() => [
+    '/depth-maps/depth-1.jpg',
+    '/depth-maps/key-biscayne-1.jpg',
+    '/depth-maps/key-biscayne-3.jpg',
+    '/depth-maps/key-biscayne-4.jpg',
+    '/depth-maps/key-biscayne-5.jpg',
+    '/depth-maps/key-biscayne-6 (1).jpg',
+    '/depth-maps/key-biscayne-7.jpg',
+  ], []);
+
+  // Build / rebuild nodes whenever site or showDepthMap changes
   useEffect(() => {
-    // Generate nodes based on site points (original behavior)
     if (site.points.length === 0) {
-      // No pre-existing points — show the uploader
       setShowUploader(true);
       return;
     }
 
-    const samplePanos = [
-      'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-1.jpg',
-      'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-2.jpg',
-      'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-3.jpg',
-      'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-4.jpg',
-      'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-5.jpg',
-      'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-6.jpg',
-    ];
+    const panos = showDepthMap ? depthPanos : samplePanos;
 
     const generatedNodes: TourNode[] = site.points.map((p, i) => {
       const links: { nodeId: string }[] = [];
@@ -150,7 +163,7 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
 
       return {
         id: `node-${i}`,
-        panorama: samplePanos[i % samplePanos.length],
+        panorama: panos[i % panos.length],
         name: `Point ${i + 1}`,
         links,
         gps: [p.lng, p.lat],
@@ -159,8 +172,21 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
     });
 
     setNodes(generatedNodes);
-    setCurrentNodeId(generatedNodes[0].id);
-  }, [site]);
+    if (!currentNodeId) {
+      setCurrentNodeId(generatedNodes[0].id);
+    }
+  }, [site, showDepthMap, samplePanos, depthPanos]);
+
+  // When nodes change (due to toggle), push updated nodes into the VirtualTourPlugin
+  useEffect(() => {
+    if (psvRef.current && nodes.length > 0) {
+      const virtualTour = psvRef.current.getPlugin(VirtualTourPlugin);
+      if (virtualTour) {
+        const targetNodeId = currentNodeId || nodes[0].id;
+        virtualTour.setNodes(nodes, targetNodeId);
+      }
+    }
+  }, [nodes]);
 
   const handleTourReady = (tourNodes: TourNode[], _tourId: string) => {
     // Convert video-generated nodes: use gps for position
@@ -385,6 +411,41 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
       >
         <ArrowLeft size={20} />
       </button>
+
+      {/* Depth Map / Photo Toggle */}
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
+        <div
+          className="flex items-center rounded-2xl p-1 gap-0.5"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)',
+            backdropFilter: 'blur(40px) saturate(1.6)',
+            WebkitBackdropFilter: 'blur(40px) saturate(1.6)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
+          }}
+        >
+          <button
+            onClick={() => setShowDepthMap(false)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${!showDepthMap
+              ? 'bg-white/15 text-white shadow-lg'
+              : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+              }`}
+          >
+            <Eye size={16} />
+            Photo
+          </button>
+          <button
+            onClick={() => setShowDepthMap(true)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${showDepthMap
+              ? 'bg-indigo-500/30 text-indigo-200 shadow-lg border border-indigo-500/20'
+              : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+              }`}
+          >
+            <Layers size={16} />
+            Depth
+          </button>
+        </div>
+      </div>
 
       {/* Upload Video Button */}
       <button

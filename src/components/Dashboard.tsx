@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Folder, ChevronRight, Map as MapIcon } from 'lucide-react';
+import { Plus, Folder, ChevronRight, Map as MapIcon, Trash2 } from 'lucide-react';
 import { Project } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -7,11 +7,13 @@ interface DashboardProps {
   projects: Project[];
   onProjectSelect: (project: Project) => void;
   onCreateProject: (project: Project) => void;
+  onDeleteProject: (projectId: string) => void;
 }
 
-export function Dashboard({ projects, onProjectSelect, onCreateProject }: DashboardProps) {
+export function Dashboard({ projects, onProjectSelect, onCreateProject, onDeleteProject }: DashboardProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleCreate = () => {
     if (!newProjectName.trim()) return;
@@ -70,22 +72,54 @@ export function Dashboard({ projects, onProjectSelect, onCreateProject }: Dashbo
         {projects.map((project) => (
           <div
             key={project.id}
-            onClick={() => onProjectSelect(project)}
-            className="group cursor-pointer p-6 bg-white/[0.03] hover:bg-white/[0.08] backdrop-blur-xl border border-white/[0.05] hover:border-white/[0.15] rounded-3xl shadow-xl transition-all duration-300 flex flex-col gap-4"
+            className="group p-6 bg-white/[0.03] hover:bg-white/[0.08] backdrop-blur-xl border border-white/[0.05] hover:border-white/[0.15] rounded-3xl shadow-xl transition-all duration-300 flex flex-col gap-4"
           >
-            <div className="flex items-center justify-between">
-              <div className="p-3 bg-white/5 rounded-2xl text-white/70 group-hover:text-white group-hover:scale-110 transition-all">
-                <Folder size={28} strokeWidth={1.5} />
+            {confirmDeleteId === project.id ? (
+              <div className="flex flex-col items-center gap-3 py-4">
+                <p className="text-white/80 text-sm text-center">Delete <strong>{project.name}</strong>?<br /><span className="text-white/50">All sites will be removed.</span></p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { onDeleteProject(project.id); setConfirmDeleteId(null); }}
+                    className="px-5 py-2 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="px-5 py-2 bg-white/5 hover:bg-white/10 text-white/70 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-              <ChevronRight className="text-white/30 group-hover:text-white/70 transition-colors" />
-            </div>
-            <div>
-              <h3 className="text-xl font-medium text-white/90">{project.name}</h3>
-              <p className="text-white/50 text-sm mt-1 flex items-center gap-2">
-                <MapIcon size={14} />
-                {project.sites.length} {project.sites.length === 1 ? 'Site' : 'Sites'}
-              </p>
-            </div>
+            ) : (
+              <>
+                <div className="cursor-pointer" onClick={() => onProjectSelect(project)}>
+                  <div className="flex items-center justify-between">
+                    <div className="p-3 bg-white/5 rounded-2xl text-white/70 group-hover:text-white group-hover:scale-110 transition-all">
+                      <Folder size={28} strokeWidth={1.5} />
+                    </div>
+                    <ChevronRight className="text-white/30 group-hover:text-white/70 transition-colors" />
+                  </div>
+                  <div className="mt-4">
+                    <h3 className="text-xl font-medium text-white/90">{project.name}</h3>
+                    <p className="text-white/50 text-sm mt-1 flex items-center gap-2">
+                      <MapIcon size={14} />
+                      {project.sites.length} {project.sites.length === 1 ? 'Site' : 'Sites'}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-auto pt-3 border-t border-white/10 flex justify-end">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(project.id); }}
+                    className="p-2 text-white/30 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                    title="Delete project"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ))}
         {projects.length === 0 && !isCreating && (

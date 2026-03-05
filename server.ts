@@ -34,8 +34,8 @@ const upload = multer({
 function generateNodes(tourId: string, folderPath: string) {
   const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.png')).sort();
   const nodes: any[] = [];
-  let currentLat = 28.6139;
-  let currentLng = 77.2090;
+  let currentLat = 25.7617;
+  let currentLng = -80.1918;
 
   if (files.length === 0) {
     console.warn('WARNING: No PNG files found in ' + folderPath);
@@ -212,6 +212,30 @@ async function startServer() {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Failed to update site' });
+    }
+  });
+
+  // Delete a project (cascades to sites via DB schema)
+  app.delete('/api/projects/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      await pool.query('DELETE FROM projects WHERE id = $1', [id]);
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to delete project' });
+    }
+  });
+
+  // Delete a site
+  app.delete('/api/sites/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      await pool.query('DELETE FROM sites WHERE id = $1', [id]);
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to delete site' });
     }
   });
 

@@ -154,6 +154,33 @@ export default function App() {
     setCurrentStreetViewSite(approvedSite);
   };
 
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+    }
+    setProjects(projects.filter((p) => p.id !== projectId));
+    if (currentProject?.id === projectId) {
+      setCurrentProject(null);
+    }
+  };
+
+  const handleDeleteSite = async (siteId: string) => {
+    if (!currentProject) return;
+    try {
+      await fetch(`/api/sites/${siteId}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete site:', err);
+    }
+    const updatedProject = {
+      ...currentProject,
+      sites: currentProject.sites.filter((s) => s.id !== siteId),
+    };
+    setProjects(projects.map((p) => (p.id === currentProject.id ? updatedProject : p)));
+    setCurrentProject(updatedProject);
+  };
+
   if (!isAuthenticated) {
     return <SignIn onSignIn={() => setIsAuthenticated(true)} />;
   }
@@ -176,6 +203,7 @@ export default function App() {
               projects={projects}
               onProjectSelect={setCurrentProject}
               onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
             />
           )}
 
@@ -188,6 +216,7 @@ export default function App() {
               onCreateSite={handleCreateSite}
               onRecordSite={() => setIsRecordingSite(true)}
               onViewInventory={() => setCurrentProjectInventory(true)}
+              onDeleteSite={handleDeleteSite}
             />
           )}
 
