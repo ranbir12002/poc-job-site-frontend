@@ -59,9 +59,17 @@ export async function initDb() {
         contractor_commitment_per_day REAL,
         daily_progress TEXT NOT NULL DEFAULT '[]',
         path_thickness REAL DEFAULT 0,
-        approved INTEGER DEFAULT 0
+        approved INTEGER DEFAULT 0,
+        recordings TEXT NOT NULL DEFAULT '[]'
       );
     `);
+
+    try {
+      db.exec(`ALTER TABLE sites ADD COLUMN recordings TEXT NOT NULL DEFAULT '[]';`);
+    } catch (e) {
+      // Column might already exist
+    }
+
     console.log('SQLite database initialized successfully');
   } catch (err) {
     console.error('Error initializing SQLite database:', err);

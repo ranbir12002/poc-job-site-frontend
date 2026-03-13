@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Folder, ChevronRight, Map as MapIcon, Trash2 } from 'lucide-react';
+import { Plus, Folder, ChevronRight, Map as MapIcon, Trash2, ClipboardList, Truck } from 'lucide-react';
 import { Project } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -8,9 +8,11 @@ interface DashboardProps {
   onProjectSelect: (project: Project) => void;
   onCreateProject: (project: Project) => void;
   onDeleteProject: (projectId: string) => void;
+  onMaterialReconciliation: () => void;
+  onFleetManagement: () => void;
 }
 
-export function Dashboard({ projects, onProjectSelect, onCreateProject, onDeleteProject }: DashboardProps) {
+export function Dashboard({ projects, onProjectSelect, onCreateProject, onDeleteProject, onMaterialReconciliation, onFleetManagement }: DashboardProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -33,13 +35,29 @@ export function Dashboard({ projects, onProjectSelect, onCreateProject, onDelete
     <div className="flex flex-col h-full p-8 space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <h1 className="text-4xl font-semibold tracking-tight text-white/90">Projects</h1>
-        <button
-          onClick={() => setIsCreating(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-full backdrop-blur-md border border-white/10 transition-all shadow-lg"
-        >
-          <Plus size={20} />
-          <span>New Project</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onFleetManagement}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-full backdrop-blur-md border border-indigo-500/20 transition-all shadow-lg"
+          >
+            <Truck size={20} />
+            <span className="hidden sm:inline">Fleet</span>
+          </button>
+          <button
+            onClick={onMaterialReconciliation}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-full backdrop-blur-md border border-amber-500/20 transition-all shadow-lg"
+          >
+            <ClipboardList size={20} />
+            <span className="hidden sm:inline">Material</span>
+          </button>
+          <button
+            onClick={() => setIsCreating(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-full backdrop-blur-md border border-white/10 transition-all shadow-lg"
+          >
+            <Plus size={20} />
+            <span className="hidden sm:inline">New Project</span>
+          </button>
+        </div>
       </div>
 
       {isCreating && (

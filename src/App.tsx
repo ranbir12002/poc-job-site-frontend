@@ -9,8 +9,11 @@ import { ProjectView } from './components/ProjectView';
 import { SiteEditor } from './components/SiteEditor';
 import { SiteRecorder } from './components/SiteRecorder';
 import { StreetView } from './components/StreetView';
+import { SiteWalkthrough } from './components/SiteWalkthrough';
 import { SignIn } from './components/SignIn';
 import { PipeInventory } from './components/PipeInventory';
+import { MaterialReconciliation } from './components/MaterialReconciliation';
+import { FleetManagement } from './components/FleetManagement';
 import { Project, Site } from './types';
 
 export default function App() {
@@ -19,8 +22,10 @@ export default function App() {
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentSite, setCurrentSite] = useState<Site | null>(null);
   const [currentStreetViewSite, setCurrentStreetViewSite] = useState<Site | null>(null);
-  const [isRecordingSite, setIsRecordingSite] = useState(false);
+  const [recordingSite, setRecordingSite] = useState<Site | 'new' | null>(null);
   const [currentProjectInventory, setCurrentProjectInventory] = useState(false);
+  const [showMaterialReconciliation, setShowMaterialReconciliation] = useState(false);
+  const [showFleetManagement, setShowFleetManagement] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -198,25 +203,36 @@ export default function App() {
       {/* Main Content Area */}
       <main className="relative z-10 h-screen w-full p-2 md:p-6 flex items-center justify-center">
         <div className="w-full max-w-[98%] xl:max-w-[95%] h-[95vh] bg-white/[0.02] backdrop-blur-3xl border border-white/[0.05] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col relative">
-          {!currentProject && !currentSite && !currentStreetViewSite && !isRecordingSite && !currentProjectInventory && (
+          {!currentProject && !currentSite && !currentStreetViewSite && !recordingSite && !currentProjectInventory && !showMaterialReconciliation && !showFleetManagement && (
             <Dashboard
               projects={projects}
               onProjectSelect={setCurrentProject}
               onCreateProject={handleCreateProject}
               onDeleteProject={handleDeleteProject}
+              onMaterialReconciliation={() => setShowMaterialReconciliation(true)}
+              onFleetManagement={() => setShowFleetManagement(true)}
             />
           )}
 
-          {currentProject && !currentSite && !currentStreetViewSite && !isRecordingSite && !currentProjectInventory && (
+          {showFleetManagement && (
+            <FleetManagement onBack={() => setShowFleetManagement(false)} />
+          )}
+
+          {showMaterialReconciliation && (
+            <MaterialReconciliation onBack={() => setShowMaterialReconciliation(false)} />
+          )}
+
+          {currentProject && !currentSite && !currentStreetViewSite && !recordingSite && !currentProjectInventory && (
             <ProjectView
               project={currentProject}
               onBack={() => setCurrentProject(null)}
               onSiteSelect={setCurrentSite}
               onStreetViewSelect={setCurrentStreetViewSite}
               onCreateSite={handleCreateSite}
-              onRecordSite={() => setIsRecordingSite(true)}
+              onRecordSite={(site?: Site) => setRecordingSite(site || 'new')}
               onViewInventory={() => setCurrentProjectInventory(true)}
               onDeleteSite={handleDeleteSite}
+              onUpdateSite={handleSaveSite}
             />
           )}
 
@@ -228,7 +244,7 @@ export default function App() {
             />
           )}
 
-          {currentProject && currentSite && !isRecordingSite && (
+          {currentProject && currentSite && !recordingSite && (
             <SiteEditor
               site={currentSite}
               onBack={() => setCurrentSite(null)}
@@ -236,20 +252,33 @@ export default function App() {
             />
           )}
 
-          {currentProject && currentStreetViewSite && !isRecordingSite && (
-            <StreetView
-              site={currentStreetViewSite}
-              onClose={() => setCurrentStreetViewSite(null)}
-              onApprove={handleApproveSite}
-            />
+          {currentProject && currentStreetViewSite && !recordingSite && (
+            currentStreetViewSite.metrics?.tourNodes && currentStreetViewSite.metrics.tourNodes.length > 0 ? (
+              <SiteWalkthrough
+                site={currentStreetViewSite}
+                onClose={() => setCurrentStreetViewSite(null)}
+                onApprove={handleApproveSite}
+              />
+            ) : (
+              <StreetView
+                site={currentStreetViewSite}
+                onClose={() => setCurrentStreetViewSite(null)}
+                onApprove={handleApproveSite}
+              />
+            )
           )}
 
-          {currentProject && isRecordingSite && (
+          {currentProject && recordingSite && (
             <SiteRecorder
-              onBack={() => setIsRecordingSite(false)}
+              existingSite={recordingSite === 'new' ? undefined : recordingSite}
+              onBack={() => setRecordingSite(null)}
               onSave={(site) => {
-                handleCreateSite(site);
-                setIsRecordingSite(false);
+                if (recordingSite === 'new') {
+                  handleCreateSite(site);
+                } else {
+                  handleSaveSite(site);
+                }
+                setRecordingSite(null);
               }}
             />
           )}

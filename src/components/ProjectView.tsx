@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Plus, MapPin, ChevronRight, Ruler, Clock, Video, Layers, Eye, Box, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, MapPin, ChevronRight, Ruler, Clock, Video, Layers, Eye, Box, Trash2, Edit2, Check, X } from 'lucide-react';
 import { Project, Site } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -9,15 +9,18 @@ interface ProjectViewProps {
   onSiteSelect: (site: Site) => void;
   onStreetViewSelect: (site: Site) => void;
   onCreateSite: (site: Site) => void;
-  onRecordSite: () => void;
+  onRecordSite: (site?: Site) => void;
   onViewInventory: () => void;
   onDeleteSite: (siteId: string) => void;
+  onUpdateSite?: (site: Site) => void;
 }
 
-export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect, onCreateSite, onRecordSite, onViewInventory, onDeleteSite }: ProjectViewProps) {
+export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect, onCreateSite, onRecordSite, onViewInventory, onDeleteSite, onUpdateSite }: ProjectViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newSiteName, setNewSiteName] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [editingSiteId, setEditingSiteId] = useState<string | null>(null);
+  const [editingSiteName, setEditingSiteName] = useState('');
 
   const handleCreate = () => {
     if (!newSiteName.trim()) return;
@@ -51,11 +54,11 @@ export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect,
         <div className="flex-1" />
         <div className="flex items-center gap-3">
           <button
-            onClick={onRecordSite}
+            onClick={() => onRecordSite()}
             className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-full backdrop-blur-md border border-red-500/20 transition-all shadow-lg"
           >
             <Video size={20} />
-            <span className="hidden sm:inline">Record Site</span>
+            <span className="hidden sm:inline">New Site Rec</span>
           </button>
           <button
             onClick={onViewInventory}
@@ -130,16 +133,73 @@ export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect,
                   <div className="p-3 bg-white/5 rounded-2xl text-white/70 group-hover:text-white group-hover:scale-110 transition-all">
                     <MapPin size={28} strokeWidth={1.5} />
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(site.id); }}
-                    className="p-2 text-white/30 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
-                    title="Delete site"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingSiteId(site.id);
+                        setEditingSiteName(site.name);
+                      }}
+                      className="p-2 text-white/30 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-xl transition-colors"
+                      title="Rename site"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(site.id); }}
+                      className="p-2 text-white/30 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                      title="Delete site"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
                 <div>
-                  <h3 className="text-xl font-medium text-white/90">{site.name}</h3>
+                  {editingSiteId === site.id ? (
+                    <div className="flex items-center gap-2">
+                       <input
+                         autoFocus
+                         type="text"
+                         value={editingSiteName}
+                         onChange={(e) => setEditingSiteName(e.target.value)}
+                         onKeyDown={(e) => {
+                           if (e.key === 'Enter') {
+                             if (editingSiteName.trim() && onUpdateSite) {
+                               onUpdateSite({ ...site, name: editingSiteName });
+                             }
+                             setEditingSiteId(null);
+                           } else if (e.key === 'Escape') {
+                             setEditingSiteId(null);
+                           }
+                         }}
+                         onClick={(e) => e.stopPropagation()}
+                         className="flex-1 bg-black/40 border border-white/20 rounded-lg px-2 py-1 text-white text-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                       />
+                       <button
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           if (editingSiteName.trim() && onUpdateSite) {
+                             onUpdateSite({ ...site, name: editingSiteName });
+                           }
+                           setEditingSiteId(null);
+                         }}
+                         className="p-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg transition-colors"
+                       >
+                         <Check size={16} />
+                       </button>
+                       <button
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           setEditingSiteId(null);
+                         }}
+                         className="p-1.5 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white rounded-lg transition-colors"
+                       >
+                         <X size={16} />
+                       </button>
+                    </div>
+                  ) : (
+                    <h3 className="text-xl font-medium text-white/90">{site.name}</h3>
+                  )}
                   <div className="flex items-center gap-4 mt-3 text-white/50 text-sm">
                     <div className="flex items-center gap-1.5">
                       <Ruler size={14} />
@@ -158,20 +218,30 @@ export function ProjectView({ project, onBack, onSiteSelect, onStreetViewSelect,
                       e.stopPropagation();
                       onSiteSelect(site);
                     }}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded-xl transition-colors text-sm font-medium"
+                    className="flex-1 flex items-center justify-center gap-2 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded-xl transition-colors text-sm font-medium"
                   >
                     <Layers size={16} />
-                    Map View
+                    Map
                   </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       onStreetViewSelect(site);
                     }}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors text-sm font-medium"
+                    className="flex-1 flex items-center justify-center gap-2 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors text-sm font-medium"
                   >
                     <Eye size={16} />
-                    Street View
+                    Street
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRecordSite(site);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl transition-colors text-sm font-medium"
+                  >
+                    <Video size={16} />
+                    Update Site Rec
                   </button>
                 </div>
               </>

@@ -48,6 +48,34 @@ export interface Pipe {
   updatedAt: number;
 }
 
+export interface LidarScan {
+  id: string;
+  filename: string;
+  format: 'ply' | 'obj' | 'glb' | 'usdz';
+  fileUrl: string;
+  vertexCount: number;
+  boundingBox: {
+    minX: number; minY: number; minZ: number;
+    maxX: number; maxY: number; maxZ: number;
+  };
+  depthRange: { min: number; max: number };
+  surfaceArea?: number;
+  volume?: number;
+  createdAt: number;
+  deviceInfo?: string;
+}
+
+export interface SiteRecording {
+  id: string;
+  createdAt: number;
+  name?: string;
+  tourNodes: any[];
+  tourId?: string;
+  points: Point[];
+  approved?: boolean;
+  lidarScans?: LidarScan[];
+}
+
 export interface DailyProgress {
   id: string;
   date: number;
@@ -69,6 +97,7 @@ export interface Site {
   dailyProgress?: DailyProgress[];
   pathThickness?: number;
   approved?: boolean;
+  recordings?: SiteRecording[];
 }
 
 export interface Point {
@@ -80,4 +109,6 @@ export interface SiteMetrics {
   perimeterMeters: number;
   vertexCount: number;
   estimatedWalkTimeMinutes: number;
+  tourNodes?: any[];
+  tourId?: string;
 }

@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, CheckCircle, Route, Navigation, Flag, Layers, Eye } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, CheckCircle, Route, Navigation, Flag, Layers, Eye, Scan, MapPin } from 'lucide-react';
 import { ReactPhotoSphereViewer } from 'react-photo-sphere-viewer';
 import { VirtualTourPlugin } from '@photo-sphere-viewer/virtual-tour-plugin';
 import { MapContainer, TileLayer, Polygon, Polyline, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Site, Point } from '../types';
+import { Site, Point, LidarScan } from '../types';
 import { VideoUploader } from './VideoUploader';
+import { ScanViewer } from './ScanViewer';
+import { LidarCapture } from './LidarCapture';
 import { calculateDistance, calculateTotalDistance } from '../lib/utils';
 import '@photo-sphere-viewer/core/index.css';
 import '@photo-sphere-viewer/virtual-tour-plugin/index.css';
@@ -17,6 +19,7 @@ interface TourNode {
   gps: [number, number];
   links: { nodeId: string }[];
   position?: { lat: number; lng: number };
+  panoData?: any;
 }
 
 interface StreetViewProps {
@@ -118,8 +121,26 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
   const [currentNodeId, setCurrentNodeId] = useState<string>('');
   const [nodes, setNodes] = useState<TourNode[]>([]);
   const [showUploader, setShowUploader] = useState(false);
-  const [isApproved, setIsApproved] = useState(site.approved || false);
-  const [showDepthMap, setShowDepthMap] = useState(false);
+  
+  const [activeRecordingId, setActiveRecordingId] = useState<string | null>(
+    site.recordings && site.recordings.length > 0 ? site.recordings[site.recordings.length - 1].id : null
+  );
+
+  const activeRecording = useMemo(() => {
+    return site.recordings?.find(r => r.id === activeRecordingId);
+  }, [site.recordings, activeRecordingId]);
+
+  const [isApproved, setIsApproved] = useState(activeRecording?.approved ?? site.approved ?? false);
+
+  useEffect(() => {
+    setIsApproved(activeRecording?.approved ?? site.approved ?? false);
+  }, [activeRecording, site.approved]);
+
+
+  const [viewTab, setViewTab] = useState<'photo' | 'depth' | 'scan'>('photo');
+  const [activeScan, setActiveScan] = useState<LidarScan | null>(null);
+  const [showLidarCapture, setShowLidarCapture] = useState(false);
+  const [isFetchingNodes, setIsFetchingNodes] = useState(false);
 
   const samplePanos = useMemo(() => [
     'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-1.jpg',
@@ -131,51 +152,62 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
     'https://photo-sphere-viewer-data.netlify.app/assets/tour/key-biscayne-7.jpg',
   ], []);
 
-  const depthPanos = useMemo(() => [
-    '/depth-maps/depth-1.jpg',
-    '/depth-maps/key-biscayne-1.jpg',
-    '/depth-maps/key-biscayne-3.jpg',
-    '/depth-maps/key-biscayne-4.jpg',
-    '/depth-maps/key-biscayne-5.jpg',
-    '/depth-maps/key-biscayne-6 (1).jpg',
-    '/depth-maps/key-biscayne-7.jpg',
-  ], []);
 
-  // Build / rebuild nodes whenever site or showDepthMap changes
+
+  // Build / rebuild nodes whenever site or activeRecording changes
   useEffect(() => {
-    if (site.points.length === 0) {
-      setShowUploader(true);
-      return;
+    async function loadNodes() {
+      // Use activeRecording's tourNodes, fallback to site.metrics.tourNodes
+      const memoryNodes = activeRecording?.tourNodes || site.metrics?.tourNodes;
+      const tourId = activeRecording?.tourId || site.metrics?.tourId;
+      
+      let finalTourNodes = memoryNodes;
+
+      // If and only if we have a tourId but no nodes in memory, fetch on demand
+      if ((!finalTourNodes || finalTourNodes.length === 0) && tourId) {
+        setIsFetchingNodes(true);
+        try {
+          const res = await fetch(`/frames/${tourId}/nodes.json`);
+          if (res.ok) {
+            finalTourNodes = await res.json();
+          }
+        } catch (err) {
+          console.error("Failed to fetch on-demand nodes:", err);
+        } finally {
+          setIsFetchingNodes(false);
+        }
+      }
+
+      if (finalTourNodes && finalTourNodes.length > 0) {
+        const enrichedNodes: TourNode[] = finalTourNodes.map((n: any) => ({
+          ...n,
+          panorama: n.panorama,
+          position: { lat: n.gps[1], lng: n.gps[0] },
+          panoData: (image: HTMLImageElement) => {
+            const verticalFov = 60; 
+            const fullHeight = Math.round(image.height * (180 / verticalFov));
+            const fullWidth = fullHeight * 2;
+            return {
+              fullWidth,
+              fullHeight,
+              croppedWidth: image.width,
+              croppedHeight: image.height,
+              croppedX: Math.round((fullWidth - image.width) / 2),
+              croppedY: Math.round((fullHeight - image.height) / 2),
+            };
+          }
+        }));
+        setNodes(enrichedNodes);
+        // CRITICAL: Always reset to the first node when switching recordings/versions
+        setCurrentNodeId(enrichedNodes[0].id);
+      } else {
+        setNodes([]);
+        setCurrentNodeId('');
+      }
     }
 
-    const panos = showDepthMap ? depthPanos : samplePanos;
-
-    const generatedNodes: TourNode[] = site.points.map((p, i) => {
-      const links: { nodeId: string }[] = [];
-      if (i > 0) links.push({ nodeId: `node-${i - 1}` });
-      if (i < site.points.length - 1) links.push({ nodeId: `node-${i + 1}` });
-      if (site.isClosed && i === site.points.length - 1 && site.points.length > 2) {
-        links.push({ nodeId: `node-0` });
-      }
-      if (site.isClosed && i === 0 && site.points.length > 2) {
-        links.push({ nodeId: `node-${site.points.length - 1}` });
-      }
-
-      return {
-        id: `node-${i}`,
-        panorama: panos[i % panos.length],
-        name: `Point ${i + 1}`,
-        links,
-        gps: [p.lng, p.lat],
-        position: p,
-      };
-    });
-
-    setNodes(generatedNodes);
-    if (!currentNodeId) {
-      setCurrentNodeId(generatedNodes[0].id);
-    }
-  }, [site, showDepthMap, samplePanos, depthPanos]);
+    loadNodes();
+  }, [site, activeRecordingId, activeRecording]);
 
   // When nodes change (due to toggle), push updated nodes into the VirtualTourPlugin
   useEffect(() => {
@@ -189,10 +221,24 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
   }, [nodes]);
 
   const handleTourReady = (tourNodes: TourNode[], _tourId: string) => {
-    // Convert video-generated nodes: use gps for position
+    // Convert video-generated nodes: use gps for position and crop the view for video frames
     const enrichedNodes: TourNode[] = tourNodes.map((n) => ({
       ...n,
       position: { lat: n.gps[1], lng: n.gps[0] },
+      panoData: (image: HTMLImageElement) => {
+        const verticalFov = 60;
+        const fullHeight = Math.round(image.height * (180 / verticalFov));
+        const fullWidth = fullHeight * 2;
+        
+        return {
+          fullWidth,
+          fullHeight,
+          croppedWidth: image.width,
+          croppedHeight: image.height,
+          croppedX: Math.round((fullWidth - image.width) / 2),
+          croppedY: Math.round((fullHeight - image.height) / 2),
+        };
+      }
     }));
     setNodes(enrichedNodes);
     setCurrentNodeId(enrichedNodes[0]?.id || '');
@@ -209,6 +255,8 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
         setCurrentNodeId(node.id);
       });
     }
+
+
   };
 
   const navigateToNode = (nodeId: string) => {
@@ -285,6 +333,33 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
   const handleNext = () => {
     if (currentIndex < nodes.length - 1) navigateToNode(nodes[currentIndex + 1].id);
   };
+
+  // If showing the LiDAR capture/upload page
+  if (showLidarCapture) {
+    return (
+      <LidarCapture
+        onScanReady={(scan) => {
+          setActiveScan(scan);
+          setViewTab('scan');
+          setShowLidarCapture(false);
+        }}
+        onCancel={() => setShowLidarCapture(false)}
+      />
+    );
+  }
+
+  // If viewing a 3D scan
+  if (viewTab === 'scan' && activeScan) {
+    return (
+      <ScanViewer
+        scan={activeScan}
+        onClose={() => {
+          setViewTab('photo');
+          setActiveScan(null);
+        }}
+      />
+    );
+  }
 
   // If showing the uploader
   if (showUploader) {
@@ -369,7 +444,12 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
         }
       `}</style>
 
-      {nodes.length > 0 ? (
+      {isFetchingNodes ? (
+        <div className="flex flex-col items-center justify-center w-full h-full bg-black">
+          <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mb-4" />
+          <p className="text-white/60 font-medium">Fetching tour nodes...</p>
+        </div>
+      ) : nodes.length > 0 ? (
         <ReactPhotoSphereViewer
           src={nodes[0].panorama}
           height="100%"
@@ -399,8 +479,19 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
           ]}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center text-white/50">
-          No points available for Street View
+        <div className="flex flex-col items-center justify-center w-full h-full text-center p-8 bg-black">
+          <Layers className="w-16 h-16 text-white/20 mb-4" />
+          <h3 className="text-xl font-medium text-white mb-2">No Tour Data Available</h3>
+          <p className="text-white/50 max-w-sm mb-6">
+            There are no recorded video frames or GPS points for this site. 
+            Please record a video using the Site Recorder or upload an existing video to generate the walkthrough.
+          </p>
+          <button
+            onClick={() => setShowUploader(true)}
+            className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl shadow-lg transition-colors font-medium"
+          >
+            Upload Video
+          </button>
         </div>
       )}
 
@@ -412,8 +503,19 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
         <ArrowLeft size={20} />
       </button>
 
-      {/* Depth Map / Photo Toggle */}
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
+      {/* Version Selector & Depth Toggle */}
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10 flex gap-4 items-center">
+        {site.recordings && site.recordings.length > 1 && (
+          <select 
+            value={activeRecordingId || ''} 
+            onChange={e => setActiveRecordingId(e.target.value)}
+            className="bg-black/60 text-white border border-white/20 rounded-xl px-4 py-2.5 text-sm font-medium backdrop-blur-xl outline-none cursor-pointer"
+          >
+            {site.recordings.slice().reverse().map(r => (
+              <option key={r.id} value={r.id} className="bg-black/80">{r.name || new Date(r.createdAt).toLocaleDateString()}</option>
+            ))}
+          </select>
+        )}
         <div
           className="flex items-center rounded-2xl p-1 gap-0.5"
           style={{
@@ -425,8 +527,8 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
           }}
         >
           <button
-            onClick={() => setShowDepthMap(false)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${!showDepthMap
+            onClick={() => setViewTab('photo')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${viewTab === 'photo'
               ? 'bg-white/15 text-white shadow-lg'
               : 'text-white/50 hover:text-white/80 hover:bg-white/5'
               }`}
@@ -435,14 +537,23 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
             Photo
           </button>
           <button
-            onClick={() => setShowDepthMap(true)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${showDepthMap
-              ? 'bg-indigo-500/30 text-indigo-200 shadow-lg border border-indigo-500/20'
+            onClick={() => {
+              // Check if there's an existing scan
+              const existingScan = activeRecording?.lidarScans?.[0];
+              if (existingScan) {
+                setActiveScan(existingScan);
+                setViewTab('scan');
+              } else {
+                setShowLidarCapture(true);
+              }
+            }}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${viewTab === 'scan'
+              ? 'bg-emerald-500/30 text-emerald-200 shadow-lg border border-emerald-500/20'
               : 'text-white/50 hover:text-white/80 hover:bg-white/5'
               }`}
           >
-            <Layers size={16} />
-            Depth
+            <Scan size={16} />
+            3D Scan
           </button>
         </div>
       </div>
@@ -472,9 +583,19 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
 
             {positions.length > 1 && (
               site.isClosed ? (
-                <Polygon positions={positions} color="#3b82f6" fillColor="#3b82f6" fillOpacity={0.2} weight={3} />
+                <Polygon 
+                  positions={positions} 
+                  color={isApproved ? '#10b981' : '#3b82f6'} 
+                  fillColor={isApproved ? '#10b981' : '#3b82f6'} 
+                  fillOpacity={0.2} 
+                  weight={3} 
+                />
               ) : (
-                <Polyline positions={positions} color="#3b82f6" weight={3} />
+                <Polyline 
+                  positions={positions} 
+                  color={isApproved ? '#10b981' : '#3b82f6'} 
+                  weight={3} 
+                />
               )
             )}
 
@@ -519,11 +640,26 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
                 unit="m"
               />
               <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent my-1" />
+              
+              <MetricItem
+                icon={MapPin}
+                label="Current Position"
+                value={`${currentNode?.position?.lat.toFixed(6)}, ${currentNode?.position?.lng.toFixed(6)}`}
+              />
+              <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent my-1" />
+
               <MetricItem
                 icon={Route}
                 label="Total Distance"
                 value={totalDistance.toFixed(1)}
                 unit="m"
+              />
+              <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent my-1" />
+
+              <MetricItem
+                icon={Flag}
+                label="Recording Date"
+                value={activeRecording ? new Date(activeRecording.createdAt).toLocaleDateString() : 'N/A'}
               />
 
               {/* Progress Bar Item */}
@@ -628,6 +764,8 @@ export function StreetView({ site, onClose, onApprove }: StreetViewProps) {
           </div>
         </div>
       )}
+
+
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Undo, Check, Ruler, Clock, MapPin, Trash2, Search, ToggleLeft, ToggleRight, Eye, Layers, Settings, Activity, Plus, X, Magnet, Move } from 'lucide-react';
+import { ArrowLeft, Save, Undo, Check, Ruler, Clock, MapPin, Trash2, Search, ToggleLeft, ToggleRight, Eye, Layers, Settings, Activity, Plus, X, Magnet, Move, Video } from 'lucide-react';
 import { Site, Point, DailyProgress } from '../types';
 import { MapCanvas, calculateMetrics } from './MapCanvas';
 import { v4 as uuidv4 } from 'uuid';
@@ -18,7 +18,11 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [mapCenter, setMapCenter] = useState<[number, number] | undefined>(
-    site.points.length > 0 ? [site.points[0].lat, site.points[0].lng] : undefined
+    site.points.length > 0 
+      ? [site.points[0].lat, site.points[0].lng] 
+      : (site.recordings && site.recordings.length > 0 && site.recordings[0].points && site.recordings[0].points.length > 0)
+        ? [site.recordings[0].points[0].lat, site.recordings[0].points[0].lng]
+        : undefined
   );
   const [isSearching, setIsSearching] = useState(false);
   const [snapToPoints, setSnapToPoints] = useState(true);
@@ -38,6 +42,10 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
   // Path Thickness State
   const [pathThickness, setPathThickness] = useState<number>(site.pathThickness || 0);
   const [approved, setApproved] = useState<boolean>(site.approved || false);
+
+  // Recordings State
+  const [showRecordingsPanel, setShowRecordingsPanel] = useState(false);
+  const [recordings, setRecordings] = useState(site.recordings || []);
 
   const metrics = calculateMetrics(points, isClosed);
 
@@ -77,6 +85,7 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
       dailyProgress,
       pathThickness,
       approved,
+      recordings,
     });
   };
 
@@ -99,6 +108,10 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
 
   const handleUpdateProgressStatus = (id: string, status: 'approved' | 'rejected') => {
     setDailyProgress(dailyProgress.map(p => p.id === id ? { ...p, status } : p));
+  };
+
+  const handleUpdateRecordingStatus = (id: string, isApproved: boolean) => {
+    setRecordings(recordings.map(r => r.id === id ? { ...r, approved: isApproved } : r));
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -143,6 +156,7 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
       <div className="absolute inset-0 z-0">
         <MapCanvas
           points={points}
+          recordings={recordings}
           onPointsChange={setPoints}
           isDrawing={isDrawing}
           isFinished={isFinished}
@@ -155,6 +169,53 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
           approved={approved}
         />
       </div>
+
+      {/* Recordings Panel */}
+      {showRecordingsPanel && (
+        <div className="absolute top-0 right-0 bottom-0 w-full md:w-96 bg-black/90 backdrop-blur-3xl border-l border-white/10 z-40 flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="p-6 border-b border-white/10 flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-white">Site Recordings</h2>
+            <button onClick={() => setShowRecordingsPanel(false)} className="p-2 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-colors">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+            {recordings.length === 0 ? (
+              <p className="text-white/40 text-sm">No recordings found for this site.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {recordings.slice().reverse().map(r => (
+                  <div key={r.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="text-white font-medium">{r.name || 'Site Recording'}</div>
+                        <div className="text-white/40 text-xs">{new Date(r.createdAt).toLocaleDateString()}</div>
+                      </div>
+                      <div className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${r.approved ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                        {r.approved ? 'Approved' : 'Pending'}
+                      </div>
+                    </div>
+                    
+                    <div className="text-sm text-white/60">
+                      Points: {r.points?.length || 0} | Frames: {r.tourNodes?.length || 0}
+                    </div>
+
+                    <div className="flex gap-2 mt-2 pt-3 border-t border-white/10">
+                      <button
+                        onClick={() => handleUpdateRecordingStatus(r.id, !r.approved)}
+                        className={`flex-1 py-1.5 rounded-lg text-sm transition-colors ${r.approved ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400' : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400'}`}
+                      >
+                        {r.approved ? 'Revert to Pending' : 'Approve'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Progress Panel */}
       {showProgressPanel && (
@@ -320,6 +381,15 @@ export function SiteEditor({ site, onBack, onSave }: SiteEditorProps) {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowRecordingsPanel(true)}
+              className="flex items-center gap-2 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-2xl backdrop-blur-xl border border-red-500/30 transition-all shadow-2xl font-medium"
+              title="Recordings"
+            >
+              <Video size={18} />
+              <span className="hidden sm:inline">Recordings</span>
+            </button>
+
             <button
               onClick={() => setShowProgressPanel(true)}
               className="flex items-center gap-2 px-4 py-3 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded-2xl backdrop-blur-xl border border-indigo-500/30 transition-all shadow-2xl font-medium"

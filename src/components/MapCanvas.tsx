@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { MapContainer, TileLayer, Polygon, Polyline, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Point, SiteMetrics } from '../types';
+import { Point, SiteMetrics, SiteRecording } from '../types';
 import mapStyle from '../map-style.json';
 
 // Fix leaflet default icon issue in react
@@ -15,6 +15,7 @@ L.Icon.Default.mergeOptions({
 
 interface MapCanvasProps {
   points: Point[];
+  recordings?: SiteRecording[];
   onPointsChange: (points: Point[]) => void;
   isDrawing: boolean;
   isFinished: boolean;
@@ -126,7 +127,7 @@ function computeBufferPolygon(points: Point[], thicknessMeters: number): [number
   return [...leftSide, ...rightSide];
 }
 
-export function MapCanvas({ points, onPointsChange, isDrawing, isFinished, isClosed = true, center, customTileUrl, showCustomTiles = false, snapToPoints = false, pathThickness = 0, approved = false }: MapCanvasProps) {
+export function MapCanvas({ points, recordings = [], onPointsChange, isDrawing, isFinished, isClosed = true, center, customTileUrl, showCustomTiles = false, snapToPoints = false, pathThickness = 0, approved = false }: MapCanvasProps) {
   const positions = useMemo(() => points.map((p) => [p.lat, p.lng] as [number, number]), [points]);
 
   const bufferPositions = useMemo(() => {
@@ -181,11 +182,27 @@ export function MapCanvas({ points, onPointsChange, isDrawing, isFinished, isClo
 
       {isFinished && positions.length > 1 && (
         isClosed ? (
-          <Polygon positions={positions} color="#3b82f6" fillColor="#3b82f6" fillOpacity={0.2} weight={3} />
+          <Polygon positions={positions} color={approved ? '#22c55e' : '#3b82f6'} fillColor={approved ? '#22c55e' : '#3b82f6'} fillOpacity={0.2} weight={3} />
         ) : (
           <Polyline positions={positions} color={approved ? '#22c55e' : '#3b82f6'} weight={3} />
         )
       )}
+
+      {/* Recordings Paths */}
+      {recordings.map(rec => {
+        if (!rec.points || rec.points.length < 2) return null;
+        const recPositions = rec.points.map(p => [p.lat, p.lng] as [number, number]);
+        return (
+          <Polyline 
+            key={rec.id} 
+            positions={recPositions} 
+            color={rec.approved ? '#10b981' : '#f59e0b'} 
+            weight={4} 
+            opacity={0.8}
+            dashArray={rec.approved ? undefined : "5, 10"}
+          />
+        );
+      })}
 
       {/* Path Thickness Buffer Overlay */}
       {isFinished && bufferPositions.length > 0 && (
